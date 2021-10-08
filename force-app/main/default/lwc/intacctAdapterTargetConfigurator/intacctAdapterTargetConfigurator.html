@@ -1,0 +1,8 @@
+<!-- Intacct Adapter Configurator -->
+<template>
+	<p class="slds-m-vertical_small">When writing to Intacct this Adapter has to make a decision about whether to do a CREATE or an UPDATE call to Intacct for each record. The logic for this decision is based on the field selected below. Select the field that holds the unique identifier for the Intacct object records (usually called RECORDNO). If the Adapter sees this field populated on a record heading to Intacct, it will use an UPDATE call. Otherwise, a CREATE call is used.</p>
+	<lightning-combobox label="Intacct Id Field" value={configuration.keyField} options={keyFields} placeholder="Which field in Intacct is the unique key?" onchange={keyChange}></lightning-combobox>
+
+	<p class="slds-m-vertical_small">After a CREATE call, the Intacct unique identifier for the newly-created record is part of the API response from Intacct. If you'd like to have that identifier written back to the Salesforce record, select which field to write it to.</p>
+	<lightning-combobox label="Writeback Field" value={configuration.writebackField} options={writebackFields} placeholder="Which field in Salesforce should hold the Intacct identifier?" onchange={writebackChange}></lightning-combobox>
+</template>

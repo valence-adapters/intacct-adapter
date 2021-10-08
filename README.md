@@ -1,26 +1,51 @@
-# Valence Ignore Records Filter
+# Valence Intacct Adapter
 
-This is an open-source Filter for [Valence](https://valence.app), a Salesforce AppExchange app for orchestrating data integrations.
+This is a custom extension for <a href="https://valence.app">Valence</a>, a <a href="https://appexchange.salesforce.com/appxListingDetail?listingId=a0N3A00000EORP4UAP">managed package on the Salesforce AppExchange</a> that provides integration middleware natively in a Salesforce org.
 
-For additional information about Filters and how they work, see the [Valence documentation](https://docs.valence.app).
+To learn more about developing extensions for the Valence platform, check out <a href="https://docs.valence.app">the Valence documentation</a>.
 
-This particular Filter allows Valence users to configure a Link so that records being processed can be discarded (ignored). A Filter configuration is attached to one or more mappings, and then a list of values can be constructed. The Filter can be inclusive (only accept records with one of those values) or exclusive (reject any records with one of those values).
+This particular Adapter allows Valence users to move data bidirectionally with their instance of [Sage Intacct](https://www.sageintacct.com/).
 
-## In Action
-
-Here's what it looks like to configure the Filter:
-
-![Screenshot of the configuration screen for ignoring records](/images/configuration_ui.png)
-
-And here's what it looks like when a record is blocked:
-
-![Screenshot of the ignore reason on a Sync Event summary page](/images/ignore_message.png)
 
 ## Installing
 
-To use this Filter you can either:
- 
-1. [Install an unlocked package version](https://github.com/valence-filters/ignore-records/releases)
-2. Clone this repository
+Click this button to install the extension into your Salesforce org.
 
-If you clone the repository and have Salesforce DX CLI set up, you can easily build a scratch org to test the filter by running `./scripts/create_dev_org`.
+<a href="https://githubsfdeploy.herokuapp.com?owner=valence-adapters&repo=intacct-adapter&ref=main">
+  <img alt="Deploy to Salesforce"
+       src="https://raw.githubusercontent.com/afawcett/githubsfdeploy/master/deploy.png">
+</a>
+
+## Setting Up Intacct Authentication
+
+After installing, you will need to configure the Adapter with the appropriate credentials from your Intacct environment.
+
+You will the following pieces of information:
+1. Intacct Company Id
+2. Web Services credentials (a "sender id" and a "sender password")
+3. Company credentials (a "user id" and "user password")
+
+There is also some setup on the Intacct side to allow API access.
+
+https://developer.intacct.com/web-services/#authentication
+https://developer.intacct.com/support/faq/#why-am-i-getting-an-error-about-an-invalid-web-services-authorization
+
+The Company Id and Web Services credentials need to be set on the Intacct Adapter custom metadata record in Valence. Search for "custom metadata" in the Setup menu and go to the Valence Adapters.
+
+Replace the placeholder values on both the source and target configurations with your real values.
+
+![Screenshot of the Adapter configuration screen](/images/adapter_configuration.png)
+
+Next we'll set up a Salesforce [Named Credential](https://help.salesforce.com/s/articleView?id=sf.named_credentials_about.htm&type=5) to hold our URL and Company credentials.
+
+Search for "named credential" in the Setup menu, then create a new one (use whatever name + label make sense to you).
+
+The URL for the Intacct API is "https://api.intacct.com/ia/xml/xmlgw.phtml".
+
+For Identity Type select "Named Principle" and for Authentication Protocol select "Password Authentication". Put in your Company credentials.
+
+***Important!***: Be sure to check the box for "Allow Merge Fields in HTTP Body", and uncheck "Generate Authorization Header".
+
+When you're done, it should look like this screenshot:
+
+![Screenshot of the Named Credential configuration screen](/images/named_credential_configuration.png)
