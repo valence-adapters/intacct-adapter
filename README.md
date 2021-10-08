@@ -28,6 +28,7 @@ You will the following pieces of information:
 There is also some setup on the Intacct side to allow API access.
 
 https://developer.intacct.com/web-services/#authentication
+
 https://developer.intacct.com/support/faq/#why-am-i-getting-an-error-about-an-invalid-web-services-authorization
 
 The Company Id and Web Services credentials need to be set on the Intacct Adapter custom metadata record in Valence. Search for "custom metadata" in the Setup menu and go to the Valence Adapters.
