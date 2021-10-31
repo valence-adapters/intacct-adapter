@@ -304,7 +304,7 @@ global with sharing class IntacctAdapter implements valence.SourceAdapterForPull
 			 * configurable "key field" for a value. If populated, we assume this is an update, if empty we assume a create.
 			 */
 			if('upsert'.equalsIgnoreCase(record.getOperation())) {
-				if(String.isNotBlank(String.valueOf(record.getProperty(valence.FieldPath.buildPath(targetConfig.keyField))))) {
+				if(String.isNotBlank(String.valueOf(record.getPropertyValue(targetConfig.keyField)))) {
 					// UPDATE
 					record.setOperation('update');
 					record.setCreated(false);
@@ -313,6 +313,7 @@ global with sharing class IntacctAdapter implements valence.SourceAdapterForPull
 					// CREATE
 					record.setOperation('create');
 					record.setCreated(true);
+					record.getProperties().remove(targetConfig.keyField); // remove the key field so Intacct doesn't complain about a null or missing key
 				}
 			}
 			IntacctFunction function = buildRecordFunction(record, context.linkTargetName);
