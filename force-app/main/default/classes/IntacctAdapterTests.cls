@@ -11,6 +11,7 @@ private class IntacctAdapterTests implements HttpCalloutMock {
 		context.linkSourceName = 'APBILL';
 		context.batchSizeLimit = 5;
 		context.mappings = new Map<String, valence.Mapping>();
+		context.suggestedQueryFields = new List<valence.FieldPath>();
 	}
 
 	/**
