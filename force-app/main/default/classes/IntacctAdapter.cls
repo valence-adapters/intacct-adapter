@@ -410,8 +410,8 @@ global with sharing class IntacctAdapter implements valence.SourceAdapterForPull
 	@TestVisible
 	private IntacctFunction buildQueryFunction(valence.LinkContext context, Integer pageSize, Integer offset) {
 		Set<String> selectFields = new Set<String>();
-		for(valence.Mapping mapping : context.mappings.values()) {
-			selectFields.add(mapping.sourcePath.getLast().name.replace('_', '.'));
+		for(valence.FieldPath path : context.suggestedQueryFields) {
+			selectFields.add(path.getLast().name);
 		}
 		return new IntacctFunction(String.format(
 			//@formatter:off
