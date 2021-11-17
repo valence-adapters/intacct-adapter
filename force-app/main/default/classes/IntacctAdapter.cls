@@ -638,10 +638,11 @@ global with sharing class IntacctAdapter implements valence.SourceAdapterForPull
 		String retVal = '';
 		for(String key : props.keySet()) {
 			Object value = props.get(key);
+			String stringVal = value instanceof Map<String, Object> ? propsToXml((Map<String, Object>)value) : String.valueOf(value)?.escapeXml();
 			retVal += String.format('<{0}>{1}</{0}>',
 				new List<Object>{
 					key,
-					value instanceof Map<String, Object> ? propsToXml((Map<String, Object>)value) : value,
+					stringVal,
 					key
 				}
 			);
