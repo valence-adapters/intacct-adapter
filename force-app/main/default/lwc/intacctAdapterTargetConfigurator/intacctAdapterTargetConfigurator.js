@@ -8,6 +8,7 @@ export default class IntacctAdapterTargetConfigurator extends ValenceUIConfigura
 
 	keyFields = [];
 	writebackFields = [];
+	entityIdFields = [];
 
 	// ------------------------------------------
 	// ----- Configurator Lifecycle Methods -----
@@ -31,14 +32,17 @@ export default class IntacctAdapterTargetConfigurator extends ValenceUIConfigura
 		});
 		this.keyFields.sort((a, b) => a.value.localeCompare(b.value));
 
-		// set up selections for the Salesforce writeback field
+		// set up selections for the Salesforce writeback field and entity id field
+		this.entityIdFields = [{'value' : '--noSelection--', 'label' : '-- None --'}];
 		this.writebackFields = [{'value' : '--noSelection--', 'label' : '-- None --'}];
 		Object.values(this.schema.Source.children).forEach((node) => {
+			this.entityIdFields.push({'value' : node.field.fieldName, 'label' : this.prettyFieldLabel(node.field.fieldName, node.field.fieldLabel)});
 			if(node.field.isEditable) {
 				this.writebackFields.push({'value' : node.field.fieldName, 'label' : this.prettyFieldLabel(node.field.fieldName, node.field.fieldLabel)});
 			}
 			// note: we deliberately ignored any nested schema fields as they are unlikely to be writeable or usable as the unique identifier
 		});
+		this.entityIdFields.sort((a, b) => a.value === '--noSelection--' ? -1 : a.value.localeCompare(b.value));
 		this.writebackFields.sort((a, b) => a.value === '--noSelection--' ? -1 : a.value.localeCompare(b.value));
 	}
 
@@ -55,6 +59,11 @@ export default class IntacctAdapterTargetConfigurator extends ValenceUIConfigura
 		this.configUpdated(); // propagate our configuration changes
 	}
 
+	entityIdChange(event) {
+		this.configuration.entityIdField = event.target.value === '--noSelection--' ? null : event.target.value;
+		this.configUpdated(); // propagate our configuration changes
+	}
+
 	writebackChange(event) {
 		this.configuration.writebackField = event.target.value === '--noSelection--' ? null : event.target.value;
 		this.configUpdated(); // propagate our configuration changes
@@ -65,7 +74,7 @@ export default class IntacctAdapterTargetConfigurator extends ValenceUIConfigura
 	// -----------------------------------------
 
 	getDefaultShape() {
-		return {keyField : 'RECORDNO', writebackField : null};
+		return {keyField : 'RECORDNO', writebackField : null, entityIdField : null};
 	}
 
 	computeValid() {

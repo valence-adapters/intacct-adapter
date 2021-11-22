@@ -17,7 +17,7 @@ global with sharing class IntacctAdapter implements valence.SourceAdapterForPull
 	private String namedCredential;
 
 	@TestVisible
-	private TargetConfiguration targetConfig = new TargetConfiguration('RECORDNO', null); // default configuration
+	private TargetConfiguration targetConfig = new TargetConfiguration('RECORDNO', null, null); // default configuration
 
 	// ----------------------------------
 	// ----- NamedCredentialAdapter -----
@@ -294,7 +294,7 @@ global with sharing class IntacctAdapter implements valence.SourceAdapterForPull
 		}
 
 		Map<String, valence.RecordInFlight> recordsByControlId = new Map<String, valence.RecordInFlight>();
-		List<IntacctFunction> functions = new List<IntacctFunction>();
+		Map<String, List<IntacctFunction>> functions = new Map<String, List<IntacctFunction>>();
 
 		// build a function representation for each record to be sent
 		for(valence.RecordInFlight record : records) {
@@ -317,30 +317,41 @@ global with sharing class IntacctAdapter implements valence.SourceAdapterForPull
 				}
 			}
 			IntacctFunction function = buildRecordFunction(record, context.linkTargetName);
-			functions.add(function);
+			String entityId = null;
+			if(String.isNotBlank(targetConfig.entityIdField)) {
+				entityId = String.valueOf(record.getOriginalPropertyValue(targetConfig.entityIdField));
+			}
+			if(!functions.containsKey(entityId)) {
+				functions.put(entityId, new List<IntacctFunction>());
+			}
+			functions.get(entityId).add(function);
 			recordsByControlId.put(function.controlId, record);
 		}
 
-		// call the Intacct API
-		sendFunctions(functions);
+		// call the Intacct API once for each entityId we found (even null for records that didn't have an entityId)
+		for(String entityId : functions.keySet()) {
+			sendFunctions(functions.get(entityId), entityId);
+		}
 
 		/*
 		 * Now it's time to parse the API responses and apply them to each RecordInFlight
 		 */
 		List<IntacctFunction> writebacks = new List<IntacctFunction>();
-		for(IntacctFunction function : functions) {
-			valence.RecordInFlight record = recordsByControlId.get(function.controlId);
-			if(record == null) {
-				throw new valence.AdapterException('Unable to match function controlid <' + function.controlId + '> to a RecordInFlight.');
-			}
-			if(function.success == true) {
-				record.setSuccess(true);
-				if(record.isCreated() == true && String.isNotBlank(targetConfig.writebackField)) {
-					writebacks.add(function);
+		for(List<IntacctFunction> functionsByEntityId : functions.values()) {
+			for(IntacctFunction function : functionsByEntityId) {
+				valence.RecordInFlight record = recordsByControlId.get(function.controlId);
+				if(record == null) {
+					throw new valence.AdapterException('Unable to match function controlid <' + function.controlId + '> to a RecordInFlight.');
 				}
-			}
-			else {
-				record.addError(function.errorMessage);
+				if(function.success == true) {
+					record.setSuccess(true);
+					if(record.isCreated() == true && String.isNotBlank(targetConfig.writebackField)) {
+						writebacks.add(function);
+					}
+				}
+				else {
+					record.addError(function.errorMessage);
+				}
 			}
 		}
 
@@ -466,16 +477,17 @@ global with sharing class IntacctAdapter implements valence.SourceAdapterForPull
 	 */
 	@TestVisible
 	private void sendFunction(IntacctFunction function) {
-		sendFunctions(new List<IntacctFunction>{function});
+		sendFunctions(new List<IntacctFunction>{function}, null);
 	}
 
 	/**
 	 * Given some functions, make an API call to Intacct and apply the results back to those functions.
 	 *
 	 * @param functions Functions to send to Intacct and which will be individually updated with the API responses to each function's payload
+	 * @param entityId An entity location id, for multi-entity shared companies
 	 */
 	@TestVisible
-	private void sendFunctions(List<IntacctFunction> functions) {
+	private void sendFunctions(List<IntacctFunction> functions, String entityId) {
 
 		Map<String, IntacctFunction> functionsByControlId = new Map<String, IntacctFunction>();
 		String cumulativePayload = '';
@@ -484,7 +496,7 @@ global with sharing class IntacctAdapter implements valence.SourceAdapterForPull
 			cumulativePayload += function.getXML();
 		}
 
-		HttpRequest req = buildRequest(cumulativePayload);
+		HttpRequest req = buildRequest(cumulativePayload, entityId);
 
 		// send the request
 		HttpResponse res = new Http().send(req);
@@ -513,11 +525,14 @@ global with sharing class IntacctAdapter implements valence.SourceAdapterForPull
 	 * @sessionId An existing sessionId, if one is available (fine to send null)
 	 *
 	 * @param functionXML XML for one or more function calls to the server
+	 * @param entityId An entity location id, for multi-entity shared companies
 	 *
 	 * @return A request, ready to be sent
 	 */
 	@TestVisible
-	private HttpRequest buildRequest(String functionXML) {
+	private HttpRequest buildRequest(String functionXML, String entityId) {
+
+		String entityPart = String.isNotBlank(entityId) ? '<locationid>' + entityId + '</locationid>' : '';
 
 		HttpRequest req = new HttpRequest();
 		req.setEndpoint('callout:' + namedCredential);
@@ -546,7 +561,7 @@ global with sharing class IntacctAdapter implements valence.SourceAdapterForPull
 				SENDER_ID,
 				SENDER_PASSWORD,
 				generateControlId(),
-				'<login><userid>{!$Credential.Username}</userid><companyid>' + COMPANY_ID + '</companyid><password>{!$Credential.Password}</password></login>',
+				'<login><userid>{!$Credential.Username}</userid><companyid>' + COMPANY_ID + '</companyid><password>{!$Credential.Password}</password>' + entityPart + '</login>',
 				functionXML
 			}
 		));
@@ -688,13 +703,16 @@ global with sharing class IntacctAdapter implements valence.SourceAdapterForPull
 		private String keyField = null;
 		@TestVisible
 		private String writebackField = null;
+		@TestVisible
+		private String entityIdField = null; // name of the field on the record that holds the entity location id, if there is one
 
 		private TargetConfiguration() {
 		}
 
-		private TargetConfiguration(String defaultKeyField, String defaultWritebackField) {
+		private TargetConfiguration(String defaultKeyField, String defaultWritebackField, String entityIdField) {
 			this.keyField = defaultKeyField;
 			this.writebackField = defaultWritebackField;
+			this.entityIdField = entityIdField;
 		}
 	}
 
