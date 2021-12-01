@@ -316,6 +316,16 @@ global with sharing class IntacctAdapter implements valence.SourceAdapterForPull
 					record.getProperties().remove(targetConfig.keyField); // remove the key field so Intacct doesn't complain about a null or missing key
 				}
 			}
+			/*
+			 * Intacct delete calls have a different message shape
+			 */
+			if('delete'.equalsIgnoreCase(record.getOperation())) {
+				Map<String, Object> props = record.getProperties();
+				Object id = props.get(targetConfig.keyField);
+				props.clear();
+				props.put('keys', id);
+				props.put('object', context.linkTargetName);
+			}
 			IntacctFunction function = buildRecordFunction(record, context.linkTargetName);
 			String entityId = null;
 			if(String.isNotBlank(targetConfig.entityIdField)) {
@@ -467,7 +477,12 @@ global with sharing class IntacctAdapter implements valence.SourceAdapterForPull
 	 */
 	@TestVisible
 	private IntacctFunction buildRecordFunction(valence.RecordInFlight record, String intacctTableName) {
-		return new IntacctFunction(String.format('<{1}><{2}>{0}</{2}></{1}>', new List<Object>{recordToXml(record), record.getOperation(), intacctTableName}), false);
+		if('delete'.equalsIgnoreCase(record.getOperation())) { // delete has a different message shape
+			return new IntacctFunction(String.format('<delete>{0}</delete>', new List<Object>{recordToXml(record)}), false);
+		}
+		else {
+			return new IntacctFunction(String.format('<{1}><{2}>{0}</{2}></{1}>', new List<Object>{recordToXml(record), record.getOperation(), intacctTableName}), false);
+		}
 	}
 
 	/**
