@@ -442,6 +442,7 @@ global with sharing class IntacctAdapter implements valence.SourceAdapterForPull
 				'{2}' +
 				'<pagesize>{3}</pagesize>' +
 				'<offset>{4}</offset>' +
+				'<options><showprivate>true</showprivate></options>' +
 			'</query>',
 			//@formatter:on
 			new List<Object>{
