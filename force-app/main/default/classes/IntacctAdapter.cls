@@ -694,6 +694,7 @@ global with sharing class IntacctAdapter implements valence.SourceAdapterForPull
 	 *
 	 * @return An XML representation of a RecordInFlight
 	 */
+	@TestVisible
 	private String recordToXml(valence.RecordInFlight record, String tableName) {
 		return propsToXml(record.getProperties(), tableName);
 	}

@@ -915,7 +915,7 @@ private class IntacctAdapterTests implements HttpCalloutMock {
 		List<valence.RecordInFlight> records = new List<valence.RecordInFlight>{
 			new valence.RecordInFlight(new Map<String, Object>{})
 		};
-		records[0].getProperties().put('RECORDNO','44');
+		records[0].getProperties().put('RECORDNO', '44');
 		adapter.pushRecords(context, records);
 
 		System.assertEquals(false, records[0].hasErrors());
@@ -1025,5 +1025,85 @@ private class IntacctAdapterTests implements HttpCalloutMock {
 
 		System.assertEquals(testFetchScope.offset, deserialized.offset);
 		System.assertEquals(testFetchScope.pageSize, deserialized.pageSize);
+	}
+
+	/**
+	 * Some relationships between entities in Intacct are missing from their API schema. Test forming the proper XML for one of these missing relationships.
+	 */
+	@IsTest static void testWriteXMLWithMissingListRelationship() {
+
+		IntacctAdapter adapter = new IntacctAdapter();
+
+		valence.RecordInFlight record = valence.ValenceTestUtil.createTestRecordInFlight(null, new Map<String, Object>{
+			'RECORDNO' => 12,
+			'NAME' => 'January Bill',
+			'APBILLITEMS' => new List<Map<String, Object>>{
+				new Map<String, Object>{
+					'LINENO' => 1,
+					'AMOUNT' => 12.00
+				},
+				new Map<String, Object>{
+					'LINENO' => 2,
+					'AMOUNT' => 4.75
+				},
+				new Map<String, Object>{
+					'LINENO' => 3,
+					'AMOUNT' => 3.33
+				}
+			},
+			// we expect this key to be ignored since it's not a list we recognize
+			'UNKNOWNLIST' => new List<Map<String, Object>>{
+				new Map<String, Object>{
+					'NAME' => 'Fred'
+				},
+				new Map<String, Object>{
+					'NAME' => 'George'
+				}
+			}
+		});
+
+		Test.startTest();
+		String response = adapter.recordToXml(record, 'APBILL');
+		Test.stopTest();
+
+		System.assertEquals(
+			'<RECORDNO>12</RECORDNO><NAME>January Bill</NAME><APBILLITEMS><APBILLITEM><LINENO>1</LINENO><AMOUNT>12.00</AMOUNT></APBILLITEM><APBILLITEM><LINENO>2</LINENO><AMOUNT>4.75</AMOUNT></APBILLITEM><APBILLITEM><LINENO>3</LINENO><AMOUNT>3.33</AMOUNT></APBILLITEM></APBILLITEMS><UNKNOWNLIST></UNKNOWNLIST>',
+			response, 'We expected the adapter to correctly decide the inner child elements are APBILLITEM tags, wrapped in APBILLITEMS.');
+	}
+
+	/**
+	 * Some relationships between entities in Intacct are missing from their API schema. Test forming the proper XML for one of these missing relationships.
+	 */
+	@IsTest static void testWriteXMLWithListWeDontHaveForThisTable() {
+
+		IntacctAdapter adapter = new IntacctAdapter();
+
+		valence.RecordInFlight record = valence.ValenceTestUtil.createTestRecordInFlight(null, new Map<String, Object>{
+			'RECORDNO' => 11,
+			'NAME' => 'Acme Inc',
+			// we expect this key to be ignored since it's not a list we recognize (for this table)
+			'APBILLITEMS' => new List<Map<String, Object>>{
+				new Map<String, Object>{
+					'LINENO' => 1,
+					'AMOUNT' => 12.00
+				},
+				new Map<String, Object>{
+					'LINENO' => 2,
+					'AMOUNT' => 4.75
+				},
+				new Map<String, Object>{
+					'LINENO' => 3,
+					'AMOUNT' => 3.33
+				}
+			}
+		});
+
+		Test.startTest();
+		String response = adapter.recordToXml(record, 'CUSTOMER');
+		Test.stopTest();
+
+		System.assertEquals(
+			'<RECORDNO>11</RECORDNO><NAME>Acme Inc</NAME><APBILLITEMS></APBILLITEMS>',
+			response, 'We expected the adapter to correctly ignore the inner list items for a key that does not belong to this table.');
 	}
 }
