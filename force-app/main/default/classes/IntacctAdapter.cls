@@ -511,10 +511,10 @@ global with sharing class IntacctAdapter implements valence.SourceAdapterForPull
 	@TestVisible
 	private IntacctFunction buildRecordFunction(valence.RecordInFlight record, String intacctTableName) {
 		if('delete'.equalsIgnoreCase(record.getOperation())) { // delete has a different message shape
-			return new IntacctFunction(String.format('<delete>{0}</delete>', new List<Object>{recordToXml(record)}), false);
+			return new IntacctFunction(String.format('<delete>{0}</delete>', new List<Object>{recordToXml(record, intacctTableName)}), false);
 		}
 		else {
-			return new IntacctFunction(String.format('<{1}><{2}>{0}</{2}></{1}>', new List<Object>{recordToXml(record), record.getOperation(), intacctTableName}), false);
+			return new IntacctFunction(String.format('<{1}><{2}>{0}</{2}></{1}>', new List<Object>{recordToXml(record, intacctTableName), record.getOperation(), intacctTableName}), false);
 		}
 	}
 
@@ -690,25 +690,57 @@ global with sharing class IntacctAdapter implements valence.SourceAdapterForPull
 
 	/**
 	 * @param record A single RecordInFlight
+	 * @param tableName The type of record this is
 	 *
 	 * @return An XML representation of a RecordInFlight
 	 */
-	private String recordToXml(valence.RecordInFlight record) {
-		return propsToXml(record.getProperties());
+	private String recordToXml(valence.RecordInFlight record, String tableName) {
+		return propsToXml(record.getProperties(), tableName);
 	}
 
-	private String propsToXml(Map<String, Object> props) {
+	private String propsToXml(Map<String, Object> props, String tableName) {
 		String retVal = '';
 		for(String key : props.keySet()) {
 			Object value = props.get(key);
-			String stringVal = value instanceof Map<String, Object> ? propsToXml((Map<String, Object>)value) : String.valueOf(value)?.escapeXml();
+			String stringVal = '';
+			if(value instanceof List<Object>) {
+				stringVal = propsToXml(key, (List<Object>)value, tableName);
+			}
+			else if(value instanceof Map<String, Object>) {
+				stringVal = propsToXml((Map<String, Object>)value, tableName);
+			}
+			else {
+				stringVal = String.valueOf(value)?.escapeXml();
+			}
 			retVal += String.format('<{0}>{1}</{0}>',
 				new List<Object>{
 					key,
-					stringVal,
-					key
+					stringVal
 				}
 			);
+		}
+		return retVal;
+	}
+
+	/**
+	 * Special method for handling writing a list of nested objects into XML. In order to write a list we need to know what to call each list item, which is
+	 * not something that is intrinsically part of a Valence RecordInFlight and needs to be retrieved elsewhere.
+	 *
+	 * @param parentFieldName The container element
+	 * @param items A collection of nested objects
+	 * @param tableName The table we are writing to
+	 *
+	 * @return Properly XML-encoded list of elements
+	 */
+	private String propsToXml(String parentFieldName, List<Object> items, String tableName) {
+		String retVal = '';
+		// figure out item name to use
+		if(MISSING_RELATIONSHIPS.containsKey(tableName) && MISSING_RELATIONSHIPS.get(tableName).containsKey(parentFieldName)) {
+			String childItemName = MISSING_RELATIONSHIPS.get(tableName).get(parentFieldName).childXmlName;
+			// encode items properly
+			for(Object item : items) {
+				retVal += String.format('<{0}>{1}</{0}>', new List<Object>{childItemName, propsToXml((Map<String, Object>)item, tableName)});
+			}
 		}
 		return retVal;
 	}
