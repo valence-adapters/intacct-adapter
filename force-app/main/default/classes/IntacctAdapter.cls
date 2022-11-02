@@ -6,6 +6,20 @@ global with sharing class IntacctAdapter implements valence.SourceAdapterForPull
 	private final static String INTACCT_DATE_FORMAT = 'MM/dd/yyyy HH:mm:ss';
 	private final static String SERVER_TIMEZONE = 'America/New_York';
 
+	/**
+	 * The Intacct API doesn't seem to include One2Many relationships for whatever reason. This makes it difficult to manage circumstances such as APBILLITEM
+	 * entries that reside inside an APBILL (neither entity claims or defines the relationship).
+	 *
+	 * We use this special info class to manually define these relationships so we can behave appropriately by:
+	 * 1. Surfacing the relationship information in the schema so users are aware and can build correct mappings
+	 * 2. Referring to the relationship info when constructing representations of records
+	 */
+	private final static Map<String, Map<String, Relationship>> MISSING_RELATIONSHIPS = new Map<String, Map<String, Relationship>>{
+		'APBILL' => new Map<String, Relationship>{
+			'APBILLITEMS' => new Relationship('APBILLITEMS', 'APBILLITEM', 'APBILLITEM')
+		}
+	};
+
 	@TestVisible
 	private String SENDER_ID;
 	@TestVisible
@@ -91,6 +105,8 @@ global with sharing class IntacctAdapter implements valence.SourceAdapterForPull
 
 	private List<valence.Field> parseFields(Dom.XmlNode objectDefinition) {
 
+		String objectName = objectDefinition.getAttributeValue('Name', null);
+
 		List<valence.Field> fields = new List<valence.Field>();
 
 		// get all field definitions
@@ -106,13 +122,18 @@ global with sharing class IntacctAdapter implements valence.SourceAdapterForPull
 		}
 
 		// get all relationship definitions
+		List<Relationship> relationships = MISSING_RELATIONSHIPS.containsKey(objectName) ? new List<Relationship>(MISSING_RELATIONSHIPS.get(objectName).values()) : new List<Relationship>();
 		for(Dom.XmlNode fieldNode : objectDefinition.getChildElement('Relationships', null).getChildElements()) {
-			fields.add(valence.Field.create(fieldNode.getChildElement('OBJECTPATH', null).getText().replace('.', '_'))
-				.withLabel(fieldNode.getChildElement('LABEL', null).getText())
-				.withDescription('Object type: ' + fieldNode.getChildElement('OBJECTNAME', null).getText())
-				.withType(fieldNode.getChildElement('RELATIONSHIPTYPE', null).getText())
-				.setMap(true, true)
-				.setEditable(false) // not directly editable
+			relationships.add(new Relationship(fieldNode));
+		}
+		for(Relationship relationship : relationships) {
+			fields.add(valence.Field.create(relationship.apiObjectPath)
+				.withLabel(relationship.label)
+				.withDescription('Object type: ' + relationship.apiObjectName)
+				.withType(relationship.type)
+				.setMap(relationship.isMap, true)
+				.setList(relationship.isList, true)
+				.setEditable(true)
 				.build()
 			);
 		}
@@ -134,7 +155,14 @@ global with sharing class IntacctAdapter implements valence.SourceAdapterForPull
 	 */
 	public List<valence.Field> getLazyFieldChildren(String tableName, valence.FieldPath path) {
 
-		Dom.XmlNode objectDefinition = null; // our goal is to populate this with the object definition that matches the end of our FieldPath chain of objects
+		// set up our function
+		IntacctFunction fieldsFunction = new IntacctFunction('<lookup><object>' + tableName + '</object></lookup>', true);
+
+		// call the API
+		sendFunction(fieldsFunction);
+
+		// our goal is to populate this with the object definition that matches the end of our FieldPath chain of objects; we start with the top-level table
+		Dom.XmlNode objectDefinition = fieldsFunction.responseData.getChildElement('Type', null);
 
 		// start from our top-level object this Link reads from or writes to
 		String tableToInspect = tableName;
@@ -143,28 +171,32 @@ global with sharing class IntacctAdapter implements valence.SourceAdapterForPull
 		List<valence.Field> sequence = path.getSequence();
 		while(!sequence.isEmpty()) {
 
-			// set up our function
-			IntacctFunction fieldsFunction = new IntacctFunction('<lookup><object>' + tableName + '</object></lookup>', true);
-
-			// call the API
-			sendFunction(fieldsFunction);
-
-			objectDefinition = fieldsFunction.responseData.getChildElement('Type', null);
-
 			String fieldName = sequence.remove(0).name; // get the name of the next field in our chain
 
 			// get all relationship definitions
+			List<Relationship> relationships = MISSING_RELATIONSHIPS.containsKey(tableToInspect) ? new List<Relationship>(MISSING_RELATIONSHIPS.get(tableToInspect).values()) : new List<Relationship>();
 			for(Dom.XmlNode fieldNode : objectDefinition.getChildElement('Relationships', null).getChildElements()) {
+				relationships.add(new Relationship(fieldNode));
+			}
+			for(Relationship relationship : relationships) {
 
 				/*
 				 * We search through the relationships on this object because we know the name of the field we're looking for, but we don't know what kind of object
 				 * that field points to. In order to query the next object we need to exchange a field name for an object type name.
 				 */
-				if(fieldName.equalsIgnoreCase(fieldNode.getChildElement('OBJECTPATH', null).getText())) {
-					tableToInspect = fieldNode.getChildElement('OBJECTNAME', null).getText();
+				if(fieldName.equalsIgnoreCase(relationship.apiObjectPath)) {
+					tableToInspect = relationship.apiObjectName;
 					break;
 				}
 			}
+
+			// set up our function
+			fieldsFunction = new IntacctFunction('<lookup><object>' + tableToInspect + '</object></lookup>', true);
+
+			// call the API
+			sendFunction(fieldsFunction);
+
+			objectDefinition = fieldsFunction.responseData.getChildElement('Type', null);
 		}
 
 		// we finally found the right object and now we have its object definition, so standard field parse from here
@@ -793,6 +825,38 @@ global with sharing class IntacctAdapter implements valence.SourceAdapterForPull
 		private String extractIdentifier(String keyFieldName) {
 			// fetch first child because the API is unreliable on uppercase/lowercase object names
 			return responseData.getChildElements()[0].getChildElement(keyFieldName, null).getText();
+		}
+	}
+
+	/**
+	 * Representation of an Intacct relationship. We get some of these from their API and we build some of these by hand (they are missing from the API).
+	 */
+	private class Relationship {
+
+		private String apiObjectPath; // the path to this object in the API
+		private String apiObjectName; // what object each entry represents, so we can fetch field information for lazy expansion
+		private String label;
+		private String description;
+		private String type;
+		private Boolean isMap = false;
+		private Boolean isList = false;
+		private String childXmlName; // how should we encode each list item
+
+		private Relationship(String apiObjectPath, String apiObjectName, String childXmlName) {
+			this.apiObjectPath = apiObjectPath;
+			this.apiObjectName = apiObjectName;
+			this.type = 'ONE2MANY';
+			this.childXmlName = childXmlName;
+			this.isList = true;
+		}
+
+		private Relationship(Dom.XmlNode fieldNode) {
+			apiObjectPath = fieldNode.getChildElement('OBJECTPATH', null).getText().replace('.', '_');
+			apiObjectName = fieldNode.getChildElement('OBJECTNAME', null).getText();
+			label = fieldNode.getChildElement('LABEL', null).getText();
+			description = 'Object type: ' + apiObjectName;
+			type = fieldNode.getChildElement('RELATIONSHIPTYPE', null).getText();
+			isMap = true;
 		}
 	}
 }
