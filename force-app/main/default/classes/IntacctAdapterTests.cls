@@ -744,7 +744,7 @@ private class IntacctAdapterTests implements HttpCalloutMock {
 
 		List<valence.Field> fields = adapter.getFields('CONTACT');
 
-		System.assertEquals(19, fields.size());
+		System.assertEquals(20, fields.size());
 
 		System.assertEquals('RECORDNO', fields[0].name);
 		System.assertEquals('Record number', fields[0].label);
@@ -774,7 +774,7 @@ private class IntacctAdapterTests implements HttpCalloutMock {
 
 		List<valence.Field> fields = adapter.getLazyFieldChildren('CONTACT', valence.FieldPath.buildPath(new List<String>{'RelatedContact', 'AnotherRelatedThing'}));
 
-		System.assertEquals(19, fields.size());
+		System.assertEquals(20, fields.size());
 
 		System.assertEquals('RECORDNO', fields[0].name);
 		System.assertEquals('Record number', fields[0].label);
